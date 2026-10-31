@@ -20,6 +20,36 @@ on:
           - SukiSU(40548)
           - BakaSU
         default: BakaSU
+      sub_level:
+        description: "内核子版本号（5.10.NNN）。X = LTS 分支；all = 全部版本（串行，很慢，建议只选一个）"
+        required: true
+        type: choice
+        options:
+          - "all"
+          - "66"
+          - "81"
+          - "101"
+          - "110"
+          - "117"
+          - "136"
+          - "149"
+          - "160"
+          - "168"
+          - "177"
+          - "185"
+          - "198"
+          - "205"
+          - "209"
+          - "218"
+          - "226"
+          - "233"
+          - "236"
+          - "237"
+          - "240"
+          - "246"
+          - "X"
+        default: "236"
+
       ksu_mode:
         description: "KernelSU / SUSFS 模式"
         required: true
@@ -106,6 +136,11 @@ on:
         default: false
   workflow_call:
     inputs:
+      sub_level:
+        description: "内核子版本号；all = 构建全部维护版本"
+        required: false
+        type: string
+        default: "all"
       kernelsu_variant:
         required: true
         type: string
@@ -169,81 +204,73 @@ on:
         default: false
 
 jobs:
+  # 把网页上选中的 sub_level 翻译成 build.yml 需要的 os_patch_level / revision。
+  # 这样矩阵里永远只有你选的那一个版本，不会一次跑 22 个把 runner 内存打爆。
+  resolve-target:
+    name: "解析目标版本"
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.map.outputs.matrix }}
+    steps:
+      - id: map
+        run: |
+          # 把网页上选中的 sub_level 翻译成 build.yml 需要的 matrix。
+          # 只生成被选中的那一个版本，避免一次并行拉起 22 个内核构建打爆 runner 内存。
+          SUB="${{ inputs.sub_level }}"
+
+          if [ "$SUB" = "all" ]; then
+            echo 'matrix=[{"sub_level":"66","os_patch_level":"2022-01","revision":"r11"},{"sub_level":"81","os_patch_level":"2022-03","revision":"r11"},{"sub_level":"101","os_patch_level":"2022-04","revision":"r28"},{"sub_level":"110","os_patch_level":"2022-07","revision":"r1"},{"sub_level":"117","os_patch_level":"2022-09","revision":"r1"},{"sub_level":"136","os_patch_level":"2022-11","revision":"r15"},{"sub_level":"149","os_patch_level":"2023-01","revision":"r1"},{"sub_level":"160","os_patch_level":"2023-03","revision":"r1"},{"sub_level":"168","os_patch_level":"2023-04","revision":"r9"},{"sub_level":"177","os_patch_level":"2023-07","revision":"r3"},{"sub_level":"185","os_patch_level":"2023-09","revision":"r1"},{"sub_level":"198","os_patch_level":"2024-01","revision":"r17"},{"sub_level":"205","os_patch_level":"2024-03","revision":"r1"},{"sub_level":"209","os_patch_level":"2024-05","revision":"r13"},{"sub_level":"218","os_patch_level":"2024-08","revision":"r14"},{"sub_level":"226","os_patch_level":"2024-11","revision":"r8"},{"sub_level":"233","os_patch_level":"2025-02","revision":"r1"},{"sub_level":"236","os_patch_level":"2025-05","revision":"r1"},{"sub_level":"237","os_patch_level":"2025-06","revision":"r1"},{"sub_level":"240","os_patch_level":"2025-09","revision":"r1"},{"sub_level":"246","os_patch_level":"2025-12","revision":"r1"},{"sub_level":"X","os_patch_level":"lts","revision":"r1"}]' >> "$GITHUB_OUTPUT"
+            echo "目标: android12-5.10 全部 22 个维护版本（串行构建）"
+            exit 0
+          fi
+
+          case "$SUB" in
+          "66") echo 'matrix=[{"sub_level":"66","os_patch_level":"2022-01","revision":"r11"}]' >> "$GITHUB_OUTPUT" ;;
+          "81") echo 'matrix=[{"sub_level":"81","os_patch_level":"2022-03","revision":"r11"}]' >> "$GITHUB_OUTPUT" ;;
+          "101") echo 'matrix=[{"sub_level":"101","os_patch_level":"2022-04","revision":"r28"}]' >> "$GITHUB_OUTPUT" ;;
+          "110") echo 'matrix=[{"sub_level":"110","os_patch_level":"2022-07","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "117") echo 'matrix=[{"sub_level":"117","os_patch_level":"2022-09","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "136") echo 'matrix=[{"sub_level":"136","os_patch_level":"2022-11","revision":"r15"}]' >> "$GITHUB_OUTPUT" ;;
+          "149") echo 'matrix=[{"sub_level":"149","os_patch_level":"2023-01","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "160") echo 'matrix=[{"sub_level":"160","os_patch_level":"2023-03","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "168") echo 'matrix=[{"sub_level":"168","os_patch_level":"2023-04","revision":"r9"}]' >> "$GITHUB_OUTPUT" ;;
+          "177") echo 'matrix=[{"sub_level":"177","os_patch_level":"2023-07","revision":"r3"}]' >> "$GITHUB_OUTPUT" ;;
+          "185") echo 'matrix=[{"sub_level":"185","os_patch_level":"2023-09","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "198") echo 'matrix=[{"sub_level":"198","os_patch_level":"2024-01","revision":"r17"}]' >> "$GITHUB_OUTPUT" ;;
+          "205") echo 'matrix=[{"sub_level":"205","os_patch_level":"2024-03","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "209") echo 'matrix=[{"sub_level":"209","os_patch_level":"2024-05","revision":"r13"}]' >> "$GITHUB_OUTPUT" ;;
+          "218") echo 'matrix=[{"sub_level":"218","os_patch_level":"2024-08","revision":"r14"}]' >> "$GITHUB_OUTPUT" ;;
+          "226") echo 'matrix=[{"sub_level":"226","os_patch_level":"2024-11","revision":"r8"}]' >> "$GITHUB_OUTPUT" ;;
+          "233") echo 'matrix=[{"sub_level":"233","os_patch_level":"2025-02","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "236") echo 'matrix=[{"sub_level":"236","os_patch_level":"2025-05","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "237") echo 'matrix=[{"sub_level":"237","os_patch_level":"2025-06","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "240") echo 'matrix=[{"sub_level":"240","os_patch_level":"2025-09","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "246") echo 'matrix=[{"sub_level":"246","os_patch_level":"2025-12","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+          "X") echo 'matrix=[{"sub_level":"X","os_patch_level":"lts","revision":"r1"}]' >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::未知的 sub_level: $SUB"
+              exit 1
+              ;;
+          esac
+
+          if [ "$SUB" = "X" ]; then
+            echo "目标: android12-5.10-lts（最新 LTS 分支）"
+          else
+            echo "目标: android12-5.10-$SUB"
+          fi
+
   build-kernels-a12-5-10:
     name: "5.10.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    needs: resolve-target
     strategy:
       fail-fast: false
-      # LTO 链接 vmlinux.o 单 job 峰值内存 ~8GB，runner 只有 16GB。
-      # 并行度过高会触发 OOM killer，表现为「编译内核」步骤被 shutdown signal 杀死。
+      # LTO 链接 vmlinux.o 时 lld 会把全部目标文件的 bitcode 同时读入内存，
+      # 单个 job 峰值约 8GB，而 ubuntu-24.04 runner 只有 16GB。
+      # 之前 22 个版本全并行 → OOM killer 杀掉 runner，日志伪装成「编译内核」失败。
+      # 串行 + build.yml 里的 --thinlto-jobs=2 双保险。
       max-parallel: 1
       matrix:
-        include:
-          # - sub_level: "66"
-          #   os_patch_level: "2022-01"
-          #   revision: "r11"
-          # - sub_level: "81"
-          #   os_patch_level: "2022-03"
-          #   revision: "r11"
-          # - sub_level: "101"
-          #   os_patch_level: "2022-04"
-          #   revision: "r28"
-          # - sub_level: "110"
-          #   os_patch_level: "2022-07"
-          #   revision: "r1"
-          # - sub_level: "117"
-          #   os_patch_level: "2022-09"
-          #   revision: "r1"
-          # - sub_level: "136"
-          #   os_patch_level: "2022-11"
-          #   revision: "r15"
-          # - sub_level: "149"
-          #   os_patch_level: "2023-01"
-          #   revision: "r1"
-          # - sub_level: "160"
-          #   os_patch_level: "2023-03"
-          #   revision: "r1"
-          # - sub_level: "168"
-          #   os_patch_level: "2023-04"
-          #   revision: "r9"
-          # - sub_level: "177"
-          #   os_patch_level: "2023-07"
-          #   revision: "r3"
-          # - sub_level: "185"
-          #   os_patch_level: "2023-09"
-          #   revision: "r1"
-          # - sub_level: "198"
-          #   os_patch_level: "2024-01"
-          #   revision: "r17"
-          # - sub_level: "205"
-          #   os_patch_level: "2024-03"
-          #   revision: "r1"
-          # - sub_level: "209"
-          #   os_patch_level: "2024-05"
-          #   revision: "r13"
-          # - sub_level: "218"
-          #   os_patch_level: "2024-08"
-          #   revision: "r14"
-          # - sub_level: "226"
-          #   os_patch_level: "2024-11"
-          #   revision: "r8"
-          # - sub_level: "233"
-          #   os_patch_level: "2025-02"
-          #   revision: "r1"
-          - sub_level: "236"
-            os_patch_level: "2025-05"
-            revision: "r1"
-          # - sub_level: "237"
-          #   os_patch_level: "2025-06"
-          #   revision: "r1"
-          # - sub_level: "240"
-          #   os_patch_level: "2025-09"
-          #   revision: "r1"
-          # - sub_level: "246"
-          #   os_patch_level: "2025-12"
-          #   revision: "r1"
-          # - sub_level: "X"
-          #   os_patch_level: "lts"
-          #   revision: "r1"
+        include: ${{ fromJSON(needs.resolve-target.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -262,7 +289,6 @@ jobs:
       use_nomount: ${{ inputs.use_nomount || false }}
       use_networking: ${{ inputs.use_networking || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
-      export_susfs_patches: ${{ inputs.export_susfs_patches || false }}
       supp_op: false
       enable_susfs: ${{ inputs.ksu_mode != '禁用SUSFS' && inputs.ksu_mode != '禁用KSU' }}
       ksu_mode: ${{ inputs.ksu_mode || '关闭' }}
