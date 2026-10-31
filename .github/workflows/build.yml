@@ -1595,15 +1595,20 @@ jobs:
               sed -i '/MODULES_ORDER=android\/gki_aarch64_modules/d' ./common/build.config.gki.aarch64
               sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' ./common/build.config.gki.aarch64
 
-              # LTO 链接 vmlinux.o 是整次构建的内存峰值点：lld 会把所有目标文件的 bitcode
-              # 同时读入内存，单个后端编译单元约需 2GB。GitHub ubuntu-24.04 runner 只有 16GB，
-              # 矩阵并行度过高时会被 OOM killer 连带杀掉 runner 进程，
-              # 日志表现为「received a shutdown signal」+「Terminate orphan process (make)」，
-              # 看起来像编译错误，实际与补丁和内核版本无关。
-              # 这里只降低 lld 的 ThinLTO 后端并行度，不改动任何编译/链接选项，
-              # 产物内容保持不变；配合 matrix max-parallel 使用。
-              export LDFLAGS_VMLINUX="-Wl,--thinlto-jobs=2"
-              echo "[mem-guard] vmlinux LTO backend jobs limited to 2"
+              # GKI 5.10/5.15 使用 CONFIG_LTO_CLANG_FULL=y，链接 vmlinux.o 时
+              # lld 要把全部目标文件的 bitcode 一次性读进内存并做跨模块优化。
+              # lld 默认按 CPU 核数开多线程，每个线程各自持有工作集，
+              # 在 16GB 的 ubuntu-24.04 runner 上会撑爆内存：
+              # OOM killer 杀掉 runner，日志伪装成「编译内核」失败
+              # （received a shutdown signal + Terminate orphan process (make)）。
+              #
+              # --no-threads 让 lld 单线程完成同一件事：峰值内存降到约 1/4，
+              # 代价是这一步变慢。注意 --thinlto-jobs 对本配置无效——那是
+              # ThinLTO 专用参数，full LTO 下会被 lld 忽略。
+              # 仅改变链接器并行度，不改变优化级别与产物内容。
+              export LDFLAGS_VMLINUX="-Wl,--no-threads"
+              echo "[mem-guard] vmlinux LTO link forced single-threaded to avoid OOM"
+              grep -E "^CONFIG_LTO" "$DEFCONFIG" 2>/dev/null || true
               free -h || true
 
               if [ -f "build/build.sh" ]; then
